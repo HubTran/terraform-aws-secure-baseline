@@ -16,6 +16,11 @@ resource "aws_guardduty_detector" "default" {
       s3_logs {
         enable = true
       }
+      kubernetes {
+        audit_logs {
+          enable = true
+        }
+      }
     }
   }
 
