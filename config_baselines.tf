@@ -1,22 +1,22 @@
 locals {
   config_topics = [
-    module.config_baseline_ap-northeast-1.config_sns_topic,
-    module.config_baseline_ap-northeast-2.config_sns_topic,
-    module.config_baseline_ap-northeast-3.config_sns_topic,
-    module.config_baseline_ap-south-1.config_sns_topic,
-    module.config_baseline_ap-southeast-1.config_sns_topic,
-    module.config_baseline_ap-southeast-2.config_sns_topic,
-    module.config_baseline_ca-central-1.config_sns_topic,
-    module.config_baseline_eu-central-1.config_sns_topic,
-    module.config_baseline_eu-north-1.config_sns_topic,
-    module.config_baseline_eu-west-1.config_sns_topic,
-    module.config_baseline_eu-west-2.config_sns_topic,
-    module.config_baseline_eu-west-3.config_sns_topic,
-    module.config_baseline_sa-east-1.config_sns_topic,
-    module.config_baseline_us-east-1.config_sns_topic,
-    module.config_baseline_us-east-2.config_sns_topic,
-    module.config_baseline_us-west-1.config_sns_topic,
-    module.config_baseline_us-west-2.config_sns_topic,
+    one(module.config_baseline_ap-northeast-1[*].config_sns_topic),
+    one(module.config_baseline_ap-northeast-2[*].config_sns_topic),
+    one(module.config_baseline_ap-northeast-3[*].config_sns_topic),
+    one(module.config_baseline_ap-south-1[*].config_sns_topic),
+    one(module.config_baseline_ap-southeast-1[*].config_sns_topic),
+    one(module.config_baseline_ap-southeast-2[*].config_sns_topic),
+    one(module.config_baseline_ca-central-1[*].config_sns_topic),
+    one(module.config_baseline_eu-central-1[*].config_sns_topic),
+    one(module.config_baseline_eu-north-1[*].config_sns_topic),
+    one(module.config_baseline_eu-west-1[*].config_sns_topic),
+    one(module.config_baseline_eu-west-2[*].config_sns_topic),
+    one(module.config_baseline_eu-west-3[*].config_sns_topic),
+    one(module.config_baseline_sa-east-1[*].config_sns_topic),
+    one(module.config_baseline_us-east-1[*].config_sns_topic),
+    one(module.config_baseline_us-east-2[*].config_sns_topic),
+    one(module.config_baseline_us-west-1[*].config_sns_topic),
+    one(module.config_baseline_us-west-2[*].config_sns_topic),
   ]
 }
 
@@ -24,8 +24,10 @@ locals {
 # Create an IAM Role for AWS Config recorder to publish results and send notifications.
 # Reference: https://docs.aws.amazon.com/config/latest/developerguide/gs-cli-prereq.html#gs-cli-create-iamrole
 # --------------------------------------------------------------------------------------------------
+
 data "aws_iam_policy_document" "recorder_assume_role_policy" {
   count = var.config_baseline_enabled ? 1 : 0
+
   statement {
     principals {
       type        = "Service"
@@ -36,9 +38,12 @@ data "aws_iam_policy_document" "recorder_assume_role_policy" {
 }
 
 resource "aws_iam_role" "recorder" {
-  count              = var.config_baseline_enabled ? 1 : 0
+  count = var.config_baseline_enabled ? 1 : 0
+
   name               = var.config_iam_role_name
   assume_role_policy = data.aws_iam_policy_document.recorder_assume_role_policy[0].json
+
+  permissions_boundary = var.permissions_boundary_arn
 
   tags = var.tags
 }
@@ -46,6 +51,7 @@ resource "aws_iam_role" "recorder" {
 # See https://docs.aws.amazon.com/config/latest/developerguide/iamrole-permissions.html
 data "aws_iam_policy_document" "recorder_publish_policy" {
   count = var.config_baseline_enabled ? 1 : 0
+
   statement {
     actions   = ["s3:GetBucketAcl", "s3:ListBucket"]
     resources = [local.audit_log_bucket_arn]
@@ -74,14 +80,16 @@ data "aws_iam_policy_document" "recorder_publish_policy" {
 }
 
 resource "aws_iam_role_policy" "recorder_publish_policy" {
-  count  = var.config_baseline_enabled ? 1 : 0
+  count = var.config_baseline_enabled ? 1 : 0
+
   name   = var.config_iam_role_policy_name
   role   = one(aws_iam_role.recorder[*].id)
   policy = data.aws_iam_policy_document.recorder_publish_policy[0].json
 }
 
 resource "aws_iam_role_policy_attachment" "recorder_read_policy" {
-  count      = var.config_baseline_enabled ? 1 : 0
+  count = var.config_baseline_enabled ? 1 : 0
+
   role       = one(aws_iam_role.recorder[*].id)
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWS_ConfigRole"
 }
@@ -91,14 +99,15 @@ resource "aws_iam_role_policy_attachment" "recorder_read_policy" {
 # Needs to be set up in each region.
 # Global resource types are only recorded in the region specified by var.region.
 # --------------------------------------------------------------------------------------------------
+
 module "config_baseline_ap-northeast-1" {
+  count  = var.config_baseline_enabled && contains(var.target_regions, "ap-northeast-1") ? 1 : 0
   source = "./modules/config-baseline"
 
   providers = {
     aws = aws.ap-northeast-1
   }
 
-  enabled                       = var.config_baseline_enabled && contains(var.target_regions, "ap-northeast-1")
   iam_role_arn                  = one(aws_iam_role.recorder[*].arn)
   s3_bucket_name                = local.audit_log_bucket_id
   s3_key_prefix                 = var.config_s3_bucket_key_prefix
@@ -106,19 +115,20 @@ module "config_baseline_ap-northeast-1" {
   sns_topic_name                = var.config_sns_topic_name
   sns_topic_kms_master_key_id   = var.config_sns_topic_kms_master_key_id
   include_global_resource_types = var.config_global_resources_all_regions ? true : var.region == "ap-northeast-1"
-  tags                          = var.tags
+
+  tags = var.tags
 
   depends_on = [aws_s3_bucket_policy.audit_log]
 }
 
 module "config_baseline_ap-northeast-2" {
+  count  = var.config_baseline_enabled && contains(var.target_regions, "ap-northeast-2") ? 1 : 0
   source = "./modules/config-baseline"
 
   providers = {
     aws = aws.ap-northeast-2
   }
 
-  enabled                       = var.config_baseline_enabled && contains(var.target_regions, "ap-northeast-2")
   iam_role_arn                  = one(aws_iam_role.recorder[*].arn)
   s3_bucket_name                = local.audit_log_bucket_id
   s3_key_prefix                 = var.config_s3_bucket_key_prefix
@@ -126,19 +136,20 @@ module "config_baseline_ap-northeast-2" {
   sns_topic_name                = var.config_sns_topic_name
   sns_topic_kms_master_key_id   = var.config_sns_topic_kms_master_key_id
   include_global_resource_types = var.config_global_resources_all_regions ? true : var.region == "ap-northeast-2"
-  tags                          = var.tags
+
+  tags = var.tags
 
   depends_on = [aws_s3_bucket_policy.audit_log]
 }
 
 module "config_baseline_ap-northeast-3" {
+  count  = var.config_baseline_enabled && contains(var.target_regions, "ap-northeast-3") ? 1 : 0
   source = "./modules/config-baseline"
 
   providers = {
     aws = aws.ap-northeast-3
   }
 
-  enabled                       = var.config_baseline_enabled && contains(var.target_regions, "ap-northeast-3")
   iam_role_arn                  = one(aws_iam_role.recorder[*].arn)
   s3_bucket_name                = local.audit_log_bucket_id
   s3_key_prefix                 = var.config_s3_bucket_key_prefix
@@ -146,19 +157,20 @@ module "config_baseline_ap-northeast-3" {
   sns_topic_name                = var.config_sns_topic_name
   sns_topic_kms_master_key_id   = var.config_sns_topic_kms_master_key_id
   include_global_resource_types = var.config_global_resources_all_regions ? true : var.region == "ap-northeast-3"
-  tags                          = var.tags
+
+  tags = var.tags
 
   depends_on = [aws_s3_bucket_policy.audit_log]
 }
 
 module "config_baseline_ap-south-1" {
+  count  = var.config_baseline_enabled && contains(var.target_regions, "ap-south-1") ? 1 : 0
   source = "./modules/config-baseline"
 
   providers = {
     aws = aws.ap-south-1
   }
 
-  enabled                       = var.config_baseline_enabled && contains(var.target_regions, "ap-south-1")
   iam_role_arn                  = one(aws_iam_role.recorder[*].arn)
   s3_bucket_name                = local.audit_log_bucket_id
   s3_key_prefix                 = var.config_s3_bucket_key_prefix
@@ -166,19 +178,20 @@ module "config_baseline_ap-south-1" {
   sns_topic_name                = var.config_sns_topic_name
   sns_topic_kms_master_key_id   = var.config_sns_topic_kms_master_key_id
   include_global_resource_types = var.config_global_resources_all_regions ? true : var.region == "ap-south-1"
-  tags                          = var.tags
+
+  tags = var.tags
 
   depends_on = [aws_s3_bucket_policy.audit_log]
 }
 
 module "config_baseline_ap-southeast-1" {
+  count  = var.config_baseline_enabled && contains(var.target_regions, "ap-southeast-1") ? 1 : 0
   source = "./modules/config-baseline"
 
   providers = {
     aws = aws.ap-southeast-1
   }
 
-  enabled                       = var.config_baseline_enabled && contains(var.target_regions, "ap-southeast-1")
   iam_role_arn                  = one(aws_iam_role.recorder[*].arn)
   s3_bucket_name                = local.audit_log_bucket_id
   s3_key_prefix                 = var.config_s3_bucket_key_prefix
@@ -186,19 +199,20 @@ module "config_baseline_ap-southeast-1" {
   sns_topic_name                = var.config_sns_topic_name
   sns_topic_kms_master_key_id   = var.config_sns_topic_kms_master_key_id
   include_global_resource_types = var.config_global_resources_all_regions ? true : var.region == "ap-southeast-1"
-  tags                          = var.tags
+
+  tags = var.tags
 
   depends_on = [aws_s3_bucket_policy.audit_log]
 }
 
 module "config_baseline_ap-southeast-2" {
+  count  = var.config_baseline_enabled && contains(var.target_regions, "ap-southeast-2") ? 1 : 0
   source = "./modules/config-baseline"
 
   providers = {
     aws = aws.ap-southeast-2
   }
 
-  enabled                       = var.config_baseline_enabled && contains(var.target_regions, "ap-southeast-2")
   iam_role_arn                  = one(aws_iam_role.recorder[*].arn)
   s3_bucket_name                = local.audit_log_bucket_id
   s3_key_prefix                 = var.config_s3_bucket_key_prefix
@@ -206,19 +220,20 @@ module "config_baseline_ap-southeast-2" {
   sns_topic_name                = var.config_sns_topic_name
   sns_topic_kms_master_key_id   = var.config_sns_topic_kms_master_key_id
   include_global_resource_types = var.config_global_resources_all_regions ? true : var.region == "ap-southeast-2"
-  tags                          = var.tags
+
+  tags = var.tags
 
   depends_on = [aws_s3_bucket_policy.audit_log]
 }
 
 module "config_baseline_ca-central-1" {
+  count  = var.config_baseline_enabled && contains(var.target_regions, "ca-central-1") ? 1 : 0
   source = "./modules/config-baseline"
 
   providers = {
     aws = aws.ca-central-1
   }
 
-  enabled                       = var.config_baseline_enabled && contains(var.target_regions, "ca-central-1")
   iam_role_arn                  = one(aws_iam_role.recorder[*].arn)
   s3_bucket_name                = local.audit_log_bucket_id
   s3_key_prefix                 = var.config_s3_bucket_key_prefix
@@ -226,19 +241,20 @@ module "config_baseline_ca-central-1" {
   sns_topic_name                = var.config_sns_topic_name
   sns_topic_kms_master_key_id   = var.config_sns_topic_kms_master_key_id
   include_global_resource_types = var.config_global_resources_all_regions ? true : var.region == "ca-central-1"
-  tags                          = var.tags
+
+  tags = var.tags
 
   depends_on = [aws_s3_bucket_policy.audit_log]
 }
 
 module "config_baseline_eu-central-1" {
+  count  = var.config_baseline_enabled && contains(var.target_regions, "eu-central-1") ? 1 : 0
   source = "./modules/config-baseline"
 
   providers = {
     aws = aws.eu-central-1
   }
 
-  enabled                       = var.config_baseline_enabled && contains(var.target_regions, "eu-central-1")
   iam_role_arn                  = one(aws_iam_role.recorder[*].arn)
   s3_bucket_name                = local.audit_log_bucket_id
   s3_key_prefix                 = var.config_s3_bucket_key_prefix
@@ -246,19 +262,20 @@ module "config_baseline_eu-central-1" {
   sns_topic_name                = var.config_sns_topic_name
   sns_topic_kms_master_key_id   = var.config_sns_topic_kms_master_key_id
   include_global_resource_types = var.config_global_resources_all_regions ? true : var.region == "eu-central-1"
-  tags                          = var.tags
+
+  tags = var.tags
 
   depends_on = [aws_s3_bucket_policy.audit_log]
 }
 
 module "config_baseline_eu-north-1" {
+  count  = var.config_baseline_enabled && contains(var.target_regions, "eu-north-1") ? 1 : 0
   source = "./modules/config-baseline"
 
   providers = {
     aws = aws.eu-north-1
   }
 
-  enabled                       = var.config_baseline_enabled && contains(var.target_regions, "eu-north-1")
   iam_role_arn                  = one(aws_iam_role.recorder[*].arn)
   s3_bucket_name                = local.audit_log_bucket_id
   s3_key_prefix                 = var.config_s3_bucket_key_prefix
@@ -266,19 +283,20 @@ module "config_baseline_eu-north-1" {
   sns_topic_name                = var.config_sns_topic_name
   sns_topic_kms_master_key_id   = var.config_sns_topic_kms_master_key_id
   include_global_resource_types = var.config_global_resources_all_regions ? true : var.region == "eu-north-1"
-  tags                          = var.tags
+
+  tags = var.tags
 
   depends_on = [aws_s3_bucket_policy.audit_log]
 }
 
 module "config_baseline_eu-west-1" {
+  count  = var.config_baseline_enabled && contains(var.target_regions, "eu-west-1") ? 1 : 0
   source = "./modules/config-baseline"
 
   providers = {
     aws = aws.eu-west-1
   }
 
-  enabled                       = var.config_baseline_enabled && contains(var.target_regions, "eu-west-1")
   iam_role_arn                  = one(aws_iam_role.recorder[*].arn)
   s3_bucket_name                = local.audit_log_bucket_id
   s3_key_prefix                 = var.config_s3_bucket_key_prefix
@@ -286,19 +304,20 @@ module "config_baseline_eu-west-1" {
   sns_topic_name                = var.config_sns_topic_name
   sns_topic_kms_master_key_id   = var.config_sns_topic_kms_master_key_id
   include_global_resource_types = var.config_global_resources_all_regions ? true : var.region == "eu-west-1"
-  tags                          = var.tags
+
+  tags = var.tags
 
   depends_on = [aws_s3_bucket_policy.audit_log]
 }
 
 module "config_baseline_eu-west-2" {
+  count  = var.config_baseline_enabled && contains(var.target_regions, "eu-west-2") ? 1 : 0
   source = "./modules/config-baseline"
 
   providers = {
     aws = aws.eu-west-2
   }
 
-  enabled                       = var.config_baseline_enabled && contains(var.target_regions, "eu-west-2")
   iam_role_arn                  = one(aws_iam_role.recorder[*].arn)
   s3_bucket_name                = local.audit_log_bucket_id
   s3_key_prefix                 = var.config_s3_bucket_key_prefix
@@ -306,19 +325,20 @@ module "config_baseline_eu-west-2" {
   sns_topic_name                = var.config_sns_topic_name
   sns_topic_kms_master_key_id   = var.config_sns_topic_kms_master_key_id
   include_global_resource_types = var.config_global_resources_all_regions ? true : var.region == "eu-west-2"
-  tags                          = var.tags
+
+  tags = var.tags
 
   depends_on = [aws_s3_bucket_policy.audit_log]
 }
 
 module "config_baseline_eu-west-3" {
+  count  = var.config_baseline_enabled && contains(var.target_regions, "eu-west-3") ? 1 : 0
   source = "./modules/config-baseline"
 
   providers = {
     aws = aws.eu-west-3
   }
 
-  enabled                       = var.config_baseline_enabled && contains(var.target_regions, "eu-west-3")
   iam_role_arn                  = one(aws_iam_role.recorder[*].arn)
   s3_bucket_name                = local.audit_log_bucket_id
   s3_key_prefix                 = var.config_s3_bucket_key_prefix
@@ -326,19 +346,20 @@ module "config_baseline_eu-west-3" {
   sns_topic_name                = var.config_sns_topic_name
   sns_topic_kms_master_key_id   = var.config_sns_topic_kms_master_key_id
   include_global_resource_types = var.config_global_resources_all_regions ? true : var.region == "eu-west-3"
-  tags                          = var.tags
+
+  tags = var.tags
 
   depends_on = [aws_s3_bucket_policy.audit_log]
 }
 
 module "config_baseline_sa-east-1" {
+  count  = var.config_baseline_enabled && contains(var.target_regions, "sa-east-1") ? 1 : 0
   source = "./modules/config-baseline"
 
   providers = {
     aws = aws.sa-east-1
   }
 
-  enabled                       = var.config_baseline_enabled && contains(var.target_regions, "sa-east-1")
   iam_role_arn                  = one(aws_iam_role.recorder[*].arn)
   s3_bucket_name                = local.audit_log_bucket_id
   s3_key_prefix                 = var.config_s3_bucket_key_prefix
@@ -346,19 +367,20 @@ module "config_baseline_sa-east-1" {
   sns_topic_name                = var.config_sns_topic_name
   sns_topic_kms_master_key_id   = var.config_sns_topic_kms_master_key_id
   include_global_resource_types = var.config_global_resources_all_regions ? true : var.region == "sa-east-1"
-  tags                          = var.tags
+
+  tags = var.tags
 
   depends_on = [aws_s3_bucket_policy.audit_log]
 }
 
 module "config_baseline_us-east-1" {
+  count  = var.config_baseline_enabled && contains(var.target_regions, "us-east-1") ? 1 : 0
   source = "./modules/config-baseline"
 
   providers = {
     aws = aws.us-east-1
   }
 
-  enabled                       = var.config_baseline_enabled && contains(var.target_regions, "us-east-1")
   iam_role_arn                  = one(aws_iam_role.recorder[*].arn)
   s3_bucket_name                = local.audit_log_bucket_id
   s3_key_prefix                 = var.config_s3_bucket_key_prefix
@@ -366,19 +388,20 @@ module "config_baseline_us-east-1" {
   sns_topic_name                = var.config_sns_topic_name
   sns_topic_kms_master_key_id   = var.config_sns_topic_kms_master_key_id
   include_global_resource_types = var.config_global_resources_all_regions ? true : var.region == "us-east-1"
-  tags                          = var.tags
+
+  tags = var.tags
 
   depends_on = [aws_s3_bucket_policy.audit_log]
 }
 
 module "config_baseline_us-east-2" {
+  count  = var.config_baseline_enabled && contains(var.target_regions, "us-east-2") ? 1 : 0
   source = "./modules/config-baseline"
 
   providers = {
     aws = aws.us-east-2
   }
 
-  enabled                       = var.config_baseline_enabled && contains(var.target_regions, "us-east-2")
   iam_role_arn                  = one(aws_iam_role.recorder[*].arn)
   s3_bucket_name                = local.audit_log_bucket_id
   s3_key_prefix                 = var.config_s3_bucket_key_prefix
@@ -386,19 +409,20 @@ module "config_baseline_us-east-2" {
   sns_topic_name                = var.config_sns_topic_name
   sns_topic_kms_master_key_id   = var.config_sns_topic_kms_master_key_id
   include_global_resource_types = var.config_global_resources_all_regions ? true : var.region == "us-east-2"
-  tags                          = var.tags
+
+  tags = var.tags
 
   depends_on = [aws_s3_bucket_policy.audit_log]
 }
 
 module "config_baseline_us-west-1" {
+  count  = var.config_baseline_enabled && contains(var.target_regions, "us-west-1") ? 1 : 0
   source = "./modules/config-baseline"
 
   providers = {
     aws = aws.us-west-1
   }
 
-  enabled                       = var.config_baseline_enabled && contains(var.target_regions, "us-west-1")
   iam_role_arn                  = one(aws_iam_role.recorder[*].arn)
   s3_bucket_name                = local.audit_log_bucket_id
   s3_key_prefix                 = var.config_s3_bucket_key_prefix
@@ -406,19 +430,20 @@ module "config_baseline_us-west-1" {
   sns_topic_name                = var.config_sns_topic_name
   sns_topic_kms_master_key_id   = var.config_sns_topic_kms_master_key_id
   include_global_resource_types = var.config_global_resources_all_regions ? true : var.region == "us-west-1"
-  tags                          = var.tags
+
+  tags = var.tags
 
   depends_on = [aws_s3_bucket_policy.audit_log]
 }
 
 module "config_baseline_us-west-2" {
+  count  = var.config_baseline_enabled && contains(var.target_regions, "us-west-2") ? 1 : 0
   source = "./modules/config-baseline"
 
   providers = {
     aws = aws.us-west-2
   }
 
-  enabled                       = var.config_baseline_enabled && contains(var.target_regions, "us-west-2")
   iam_role_arn                  = one(aws_iam_role.recorder[*].arn)
   s3_bucket_name                = local.audit_log_bucket_id
   s3_key_prefix                 = var.config_s3_bucket_key_prefix
@@ -426,7 +451,8 @@ module "config_baseline_us-west-2" {
   sns_topic_name                = var.config_sns_topic_name
   sns_topic_kms_master_key_id   = var.config_sns_topic_kms_master_key_id
   include_global_resource_types = var.config_global_resources_all_regions ? true : var.region == "us-west-2"
-  tags                          = var.tags
+
+  tags = var.tags
 
   depends_on = [aws_s3_bucket_policy.audit_log]
 }
@@ -437,7 +463,8 @@ module "config_baseline_us-west-2" {
 
 resource "aws_config_config_rule" "iam_mfa" {
   count = var.config_baseline_enabled ? 1 : 0
-  name  = "IAMAccountMFAEnabled"
+
+  name = "IAMAccountMFAEnabled"
 
   source {
     owner             = "AWS"
@@ -470,14 +497,14 @@ resource "aws_config_config_rule" "iam_mfa" {
 
 resource "aws_config_config_rule" "unused_credentials" {
   count = var.config_baseline_enabled ? 1 : 0
-  name  = "UnusedCredentialsNotExist"
+
+  name             = "UnusedCredentialsNotExist"
+  input_parameters = "{\"maxCredentialUsageAge\": \"90\"}"
 
   source {
     owner             = "AWS"
     source_identifier = "IAM_USER_UNUSED_CREDENTIALS_CHECK"
   }
-
-  input_parameters = "{\"maxCredentialUsageAge\": \"90\"}"
 
   tags = var.tags
 
@@ -505,7 +532,8 @@ resource "aws_config_config_rule" "unused_credentials" {
 
 resource "aws_config_config_rule" "user_no_policies" {
   count = var.config_baseline_enabled ? 1 : 0
-  name  = "NoPoliciesAttachedToUser"
+
+  name = "NoPoliciesAttachedToUser"
 
   source {
     owner             = "AWS"
@@ -544,7 +572,8 @@ resource "aws_config_config_rule" "user_no_policies" {
 
 resource "aws_config_config_rule" "no_policies_with_full_admin_access" {
   count = var.config_baseline_enabled ? 1 : 0
-  name  = "NoPoliciesWithFullAdminAccess"
+
+  name = "NoPoliciesWithFullAdminAccess"
 
   source {
     owner             = "AWS"
@@ -587,6 +616,7 @@ resource "aws_config_config_rule" "no_policies_with_full_admin_access" {
 # --------------------------------------------------------------------------------------------------
 data "aws_iam_policy_document" "config_organization_assume_role_policy" {
   count = var.config_baseline_enabled ? 1 : 0
+
   statement {
     principals {
       type        = "Service"
@@ -601,6 +631,8 @@ resource "aws_iam_role" "config_organization" {
 
   name_prefix        = var.config_aggregator_name_prefix
   assume_role_policy = data.aws_iam_policy_document.config_organization_assume_role_policy[0].json
+
+  permissions_boundary = var.permissions_boundary_arn
 
   tags = var.tags
 }
